@@ -28,16 +28,28 @@ type stage2stats struct {
 	TotalPlanes int     `json:"tplanes"`
 }
 
-func main() {
+type Aircraft struct {
+	Hex        string     `json:"hex"`
+	MarkerType string     `json:"type"`
+	CallSign   string     `json:"flight"`
+	Latitude   float64    `json:"lat"`
+	Longitude  float64    `json:"lon"`
+	Altitude   json.Token `json:"alt_baro"`
+	Category   string     `json:"category,omitempty"`
+}
+
+type ADSBData struct {
+	Planes []Aircraft `json:"aircraft"`
+}
+
+type displayLines []string
+
+func initDisplay() *goi2coled.I2c {
 	// Initialize the OLED display with the provided parameters
 	oled, err := goi2coled.NewI2c(ssd1306.SSD1306_SWITCHCAPVCC, 64, 128, 0x3C, 1)
 	if err != nil {
 		panic(err)
 	}
-
-	defer func(oled *goi2coled.I2c) {
-		_ = oled.Close()
-	}(oled)
 
 	black := color.RGBA{
 		R: 0,
@@ -49,24 +61,14 @@ func main() {
 	// Set the entire OLED image to black
 	draw.Draw(oled.Img, oled.Img.Bounds(), &image.Uniform{C: black}, image.Point{}, draw.Src)
 
-	// Define a white color
-	colWhite := color.RGBA{R: 255, G: 255, B: 255, A: 255}
+	return oled
+}
 
-	// Set the starting point for drawing text
-	point := fixed.Point26_6{
-		X: fixed.Int26_6(0 * 64),
-		Y: fixed.Int26_6(15 * 64),
-	} // x = 0, y = 15
-
-	var drawer *font.Drawer
-
-	// Configure the font drawer with the chosen font and color
-	drawer = &font.Drawer{
-		Dst:  oled.Img,
-		Src:  &image.Uniform{C: colWhite},
-		Face: basicfont.Face7x13,
-		Dot:  point,
-	}
+func main() {
+	oled := initDisplay()
+	defer func(oled *goi2coled.I2c) {
+		_ = oled.Close()
+	}(oled)
 
 	host := os.Getenv("ADSBFEED_HOST")
 	if host == "" {
@@ -75,56 +77,45 @@ func main() {
 		return
 	}
 
-	var stats *stage2stats
+	stats := &stage2stats{
+		Pps:         0,
+		Mps:         0,
+		Uptime:      0,
+		Planes:      0,
+		TotalPlanes: 0,
+	}
 
-	ticker := time.NewTicker(5 * time.Second)
+	displayTicker := time.NewTicker(1 * time.Second)
+	stage2Ticker := time.NewTicker(5 * time.Second)
+	//aircraftDataTicker := time.NewTicker(5 * time.Second)
+
+	var err error
 
 	for {
 		select {
-		case <-ticker.C:
+		case <-stage2Ticker.C:
 			stats, err = getStage2Stats(host)
 			if err != nil {
 				fmt.Printf("error: %s\n", err)
 
 				continue
 			}
-
-			draw.Draw(oled.Img, oled.Img.Bounds(), &image.Uniform{C: color.Black}, image.Point{}, draw.Src)
-
-			drawer = &font.Drawer{
-				Dst:  oled.Img,
-				Src:  &image.Uniform{C: colWhite},
-				Face: basicfont.Face7x13,
-				Dot:  point,
+		case <-displayTicker.C:
+			now := time.Now()
+			dispLines := []string{
+				fmt.Sprintf("Time: %s", now.Format("15:04:05")),
+				fmt.Sprintf("Planes: %d", stats.Planes),
+				fmt.Sprintf("Planes Today: %d", stats.TotalPlanes),
+				"",
+				"",
 			}
 
-			now := time.Now()
-			formattedTime := now.Format("15:04:05")
-			timeStr := fmt.Sprintf("Time: %s", formattedTime)
-
-			drawer.DrawString(timeStr)
-
-			h := basicfont.Face7x13.Metrics().Height
-
-			drawer.Dot.X = fixed.Int26_6(0)
-			drawer.Dot.Y += h
-
-			drawer.DrawString(fmt.Sprintf("Planes: %d", stats.Planes))
-
-			drawer.Dot.X = fixed.Int26_6(0)
-			drawer.Dot.Y += h
-
-			drawer.DrawString(fmt.Sprintf("Planes Today: %d", stats.TotalPlanes))
-
-			oled.Clear()
-
-			oled.Draw()
-
-			err = oled.Display()
+			err = updateDisplayLines(dispLines, oled)
 			if err != nil {
-				fmt.Printf("error: %s\n", err)
+				fmt.Printf("error updating display: %s", err)
 			}
 		}
+
 	}
 }
 
@@ -177,4 +168,46 @@ func getStage2Stats(host string) (*stage2stats, error) {
 	}
 
 	return &foundStage2Stats[0], nil
+}
+
+func updateDisplayLines(dispLines displayLines, oled *goi2coled.I2c) error {
+	h := basicfont.Face7x13.Metrics().Height
+	var err error
+
+	var drawer *font.Drawer
+
+	point := fixed.Point26_6{
+		X: fixed.Int26_6(0 * 64),
+		Y: fixed.Int26_6(15 * 64),
+	} // x = 0, y = 15
+
+	drawer = &font.Drawer{
+		Dst:  oled.Img,
+		Src:  &image.Uniform{C: color.RGBA{R: 255, G: 255, B: 255, A: 255}},
+		Face: basicfont.Face7x13,
+		Dot:  point,
+	}
+
+	draw.Draw(oled.Img, oled.Img.Bounds(), &image.Uniform{C: color.Black}, image.Point{}, draw.Src)
+
+	for i, line := range dispLines {
+		if line == "" || i > 5 {
+			break
+		}
+
+		drawer.DrawString(line)
+		drawer.Dot.X = fixed.Int26_6(0)
+		drawer.Dot.Y += h
+	}
+
+	oled.Clear()
+
+	oled.Draw()
+
+	err = oled.Display()
+	if err != nil {
+		fmt.Printf("error: %s\n", err)
+	}
+
+	return nil
 }
