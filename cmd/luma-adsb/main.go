@@ -11,19 +11,23 @@ import (
 	"io"
 	"log/slog"
 	"math"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/jftuga/geodist"
-	"github.com/waxdred/go-i2c-oled"
+	goi2coled "github.com/waxdred/go-i2c-oled"
 	"github.com/waxdred/go-i2c-oled/ssd1306"
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/basicfont"
 	"golang.org/x/image/math/fixed"
 )
+
+var ErrFailedToGetStats = errors.New("failed to get stats")
 
 type stage2stats struct {
 	Pps         float32 `json:"pps"`
@@ -70,26 +74,29 @@ func initDisplay() *goi2coled.I2c {
 }
 
 func main() {
-	oled := initDisplay()
-	defer func(oled *goi2coled.I2c) {
-		_ = oled.Close()
-	}(oled)
+	var err error
+
+	var myLatFloat float64
+
+	var myLonFloat float64
 
 	var initError bool
 
 	host := os.Getenv("ADSBFEED_HOST")
 	if host == "" {
 		fmt.Printf("ADSBFEED_HOST not set (probably YOURHOSTNAME)\n")
+
 		initError = true
 	}
 
 	myLatStr := os.Getenv("ADSBFEED_LAT")
 	if myLatStr == "" {
 		fmt.Printf("ADSBFEED_LAT not set (probably something like \"12.345678\")\n")
+
 		initError = true
 	}
 
-	myLatFloat, err := strconv.ParseFloat(myLatStr, 64)
+	myLatFloat, err = strconv.ParseFloat(myLatStr, 64)
 	if err != nil {
 		fmt.Printf("error parsing ADSBFEED_LAT: %s\n", err)
 
@@ -99,18 +106,25 @@ func main() {
 	myLonStr := os.Getenv("ADSBFEED_LON")
 	if myLonStr == "" {
 		fmt.Printf("ADSBFEED_LON not set (probably something lke \"12.345678\")\n")
+
 		initError = true
 	}
 
-	myLonFloat, err := strconv.ParseFloat(myLonStr, 64)
+	myLonFloat, err = strconv.ParseFloat(myLonStr, 64)
 	if err != nil {
 		fmt.Printf("error parsing ADSBFEED_LON: %s\n", err)
+
 		initError = true
 	}
 
 	if initError {
 		os.Exit(1)
 	}
+
+	oled := initDisplay()
+	defer func(oled *goi2coled.I2c) {
+		_ = oled.Close()
+	}(oled)
 
 	stats := stage2stats{
 		Pps:         0,
@@ -156,12 +170,16 @@ func getADSBData(host string) (*ADSBData, error) {
 
 	var res *http.Response
 
-	url := fmt.Sprintf("http://%s:8080/data/aircraft.json", host)
+	aircraftDataURL := url.URL{
+		Scheme: "http",
+		Host:   net.JoinHostPort(host, "8080"),
+		Path:   "/data/aircraft.json",
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*500)
 	defer cancel()
 
-	req, err = http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req, err = http.NewRequestWithContext(ctx, http.MethodGet, aircraftDataURL.String(), nil)
 	if err != nil {
 		return &ADSBData{}, fmt.Errorf("error creating http req: %w", err)
 	}
@@ -171,8 +189,11 @@ func getADSBData(host string) (*ADSBData, error) {
 		return &ADSBData{}, fmt.Errorf("error making http request: %w", err)
 	}
 
+	defer res.Body.Close()
+
 	if res.StatusCode != http.StatusOK {
-		slog.Error("bad status making request", "status", res.StatusCode)
+		slog.ErrorContext(ctx, "bad status making request", "status", res.StatusCode)
+
 		return &ADSBData{}, fmt.Errorf("bad status making request: %w", err)
 	}
 
@@ -201,10 +222,12 @@ func findClosest(myADSBData ADSBData, myLatFloat float64, myLonFloat float64) (A
 	myLoc := geodist.Coord{Lat: myLatFloat, Lon: myLonFloat}
 
 	var closestDist = math.MaxFloat64
+
 	var closestPlane Aircraft
 
 	for _, flight := range myADSBData.Planes {
 		planeLoc := geodist.Coord{Lat: flight.Latitude, Lon: flight.Longitude}
+
 		distanceMiles, _ := geodist.HaversineDistance(myLoc, planeLoc)
 		if distanceMiles < closestDist {
 			closestDist = distanceMiles
@@ -250,9 +273,7 @@ func getStage2Stats(host string) (*stage2stats, error) {
 		return nil, fmt.Errorf("bad status making request: %w", err)
 	}
 
-	defer func(Body io.ReadCloser) {
-		_ = Body.Close()
-	}(res.Body)
+	defer res.Body.Close()
 
 	var body []byte
 
@@ -269,15 +290,19 @@ func getStage2Stats(host string) (*stage2stats, error) {
 	}
 
 	if len(foundStage2Stats) < 1 {
-		return nil, errors.New("failed to get stats")
+		return nil, ErrFailedToGetStats
 	}
 
 	return &foundStage2Stats[0], nil
 }
 
-func buildDisplayInfoAndUpdateDisplay(myADSBData *ADSBData, stats *stage2stats, myLatFloat float64, myLonFloat float64, oled *goi2coled.I2c) {
-	var err error
-
+func buildDisplayInfoAndUpdateDisplay(
+	myADSBData *ADSBData,
+	stats *stage2stats,
+	myLatFloat float64,
+	myLonFloat float64,
+	oled *goi2coled.I2c,
+) {
 	var numPlanes int
 
 	if len(myADSBData.Planes) > 0 {
@@ -292,10 +317,12 @@ func buildDisplayInfoAndUpdateDisplay(myADSBData *ADSBData, stats *stage2stats, 
 
 	if len(myADSBData.Planes) > 0 {
 		closestPlane, dist := findClosest(*myADSBData, myLatFloat, myLonFloat)
+
 		closest := strings.TrimSpace(closestPlane.CallSign)
 		if closest == "" {
 			closest = "none"
 		}
+
 		dispLines = append(dispLines, fmt.Sprintf("C: %s (%s)", closest, closestPlane.Hex))
 		if closestPlane.Category != "" {
 			dispLines = append(dispLines, fmt.Sprintf("D: %2.2f (%s)", dist, closestPlane.Category))
@@ -304,18 +331,16 @@ func buildDisplayInfoAndUpdateDisplay(myADSBData *ADSBData, stats *stage2stats, 
 		}
 	}
 
-	err = updateDisplayLines(dispLines, oled)
-	if err != nil {
-		fmt.Printf("error updating display: %s", err)
-	}
+	updateDisplayLines(dispLines, oled)
 }
 
 func clearDisplay(oled *goi2coled.I2c) {
 	draw.Draw(oled.Img, oled.Img.Bounds(), &image.Uniform{C: color.Black}, image.Point{}, draw.Src)
 }
 
-func updateDisplayLines(dispLines displayLines, oled *goi2coled.I2c) error {
-	h := basicfont.Face7x13.Metrics().Height
+func updateDisplayLines(dispLines displayLines, oled *goi2coled.I2c) {
+	fontHeight := basicfont.Face7x13.Metrics().Height
+
 	var err error
 
 	var drawer *font.Drawer
@@ -341,7 +366,7 @@ func updateDisplayLines(dispLines displayLines, oled *goi2coled.I2c) error {
 
 		drawer.DrawString(line)
 		drawer.Dot.X = fixed.Int26_6(0)
-		drawer.Dot.Y += h
+		drawer.Dot.Y += fontHeight
 	}
 
 	oled.Clear()
@@ -352,6 +377,4 @@ func updateDisplayLines(dispLines displayLines, oled *goi2coled.I2c) error {
 	if err != nil {
 		fmt.Printf("error: %s\n", err)
 	}
-
-	return nil
 }
