@@ -1,0 +1,29 @@
+name: golangci-lint
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 0 * * 0"
+permissions:
+  contents: read
+env:
+  GOGC: 50
+jobs:
+  golangci:
+    name: lint
+    runs-on: arc-runner-set-luma-adsb
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+      - name: Install dependencies
+        run: |
+          go get ./...
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.3.0
+          args: --timeout=60m
