@@ -1,3 +1,5 @@
+github.com/jftuga/geodist v1.0.0 h1:PFPQlZtj10u8ETAYTyxE0DWMl1bwA+Xzrqb4+oLkkC0=
+github.com/jftuga/geodist v1.0.0/go.mod h1:BohEDxpZ8S5ADAxW/9EKPSKWOVl0+3wHENIT40m4UO4=
 github.com/waxdred/go-i2c-oled v1.0.1 h1:viFpEXdyzyNHscgmgsmHEACSzSkeM0y+Fl22DlQMrUw=
 github.com/waxdred/go-i2c-oled v1.0.1/go.mod h1:EDvl5zP/km9wRofVhsaD/ojaRaXmsr+ul9vlDdF9Bo4=
 golang.org/x/image v0.32.0 h1:6lZQWq75h7L5IWNk0r+SCpUJ6tUVd3v4ZHnbRKLkUDQ=
