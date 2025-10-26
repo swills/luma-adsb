@@ -121,7 +121,7 @@ func main() {
 		Planes: make([]Aircraft, 0),
 	}
 
-	displayTicker := time.NewTicker(200 * time.Millisecond) // faster than 200ms causes issues
+	displayTicker := time.NewTicker(125 * time.Millisecond) // faster causes issues
 	stage2Ticker := time.NewTicker(1 * time.Second)
 	aircraftDataTicker := time.NewTicker(1 * time.Second)
 
@@ -387,8 +387,6 @@ func updateDisplayLines(dispLines displayLines, oled *goi2coled.I2c) {
 		drawer.Dot.X = fixed.Int26_6(0)
 		drawer.Dot.Y += fontHeight
 	}
-
-	oled.Clear()
 
 	oled.Draw()
 
