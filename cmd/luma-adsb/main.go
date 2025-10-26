@@ -1,19 +1,7 @@
 package main
 
 import (
-	"context"
-	"encoding/json"
-	"errors"
 	"fmt"
-	"image"
-	"image/color"
-	"image/draw"
-	"io"
-	"log/slog"
-	"math"
-	"net"
-	"net/http"
-	"net/url"
 	"os"
 	"os/signal"
 	"strconv"
@@ -21,39 +9,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/jftuga/geodist"
+	"github.com/swills/luma-adsb/internal/adsb"
+	"github.com/swills/luma-adsb/internal/oled"
 	goi2coled "github.com/waxdred/go-i2c-oled"
-	"github.com/waxdred/go-i2c-oled/ssd1306"
-	"golang.org/x/image/font"
-	"golang.org/x/image/font/basicfont"
-	"golang.org/x/image/math/fixed"
 )
-
-var ErrFailedToGetStats = errors.New("failed to get stats")
-
-type stage2stats struct {
-	Pps         float32 `json:"pps"`
-	Mps         float32 `json:"mps"`
-	Uptime      int     `json:"uptime"`
-	Planes      int     `json:"planes"`
-	TotalPlanes int     `json:"tplanes"`
-}
-
-type Aircraft struct {
-	Hex        string     `json:"hex"`
-	MarkerType string     `json:"type"`
-	CallSign   string     `json:"flight"`
-	Latitude   float64    `json:"lat"`
-	Longitude  float64    `json:"lon"`
-	Altitude   json.Token `json:"alt_baro"`
-	Category   string     `json:"category,omitempty"`
-}
-
-type ADSBData struct {
-	Planes []Aircraft `json:"aircraft"`
-}
-
-type displayLines []string
 
 func main() {
 	var err error
@@ -107,9 +66,9 @@ func main() {
 
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM, syscall.SIGINT, syscall.SIGABRT, syscall.SIGBUS)
 
-	oled := initDisplay()
+	oledData := oled.InitDisplay()
 
-	stats := stage2stats{
+	stats := adsb.Stage2stats{
 		Pps:         0,
 		Mps:         0,
 		Uptime:      0,
@@ -117,8 +76,8 @@ func main() {
 		TotalPlanes: 0,
 	}
 
-	myADSBData := ADSBData{
-		Planes: make([]Aircraft, 0),
+	myADSBData := adsb.Data{
+		Planes: make([]adsb.Aircraft, 0),
 	}
 
 	displayTicker := time.NewTicker(125 * time.Millisecond) // faster causes issues
@@ -130,7 +89,7 @@ func main() {
 		displayTicker.Stop()
 		stage2Ticker.Stop()
 		aircraftDataTicker.Stop()
-		cleanup(oled)
+		cleanup(oledData)
 		os.Exit(0)
 	}()
 
@@ -141,13 +100,13 @@ func main() {
 		case <-aircraftDataTicker.C:
 			go getAndUpdateADSBData(&myADSBData, host)
 		case <-displayTicker.C:
-			go buildDisplayInfoAndUpdateDisplay(&myADSBData, &stats, myLatFloat, myLonFloat, oled)
+			go buildDisplayInfoAndUpdateDisplay(&myADSBData, &stats, myLatFloat, myLonFloat, oledData)
 		}
 	}
 }
 
-func getAndUpdateADSBData(data *ADSBData, host string) {
-	newADSBData, err := getADSBData(host)
+func getAndUpdateADSBData(data *adsb.Data, host string) {
+	newADSBData, err := adsb.GetADSBData(host)
 	if err != nil {
 		fmt.Printf("error getting adsb data: %s", err)
 	} else {
@@ -155,83 +114,8 @@ func getAndUpdateADSBData(data *ADSBData, host string) {
 	}
 }
 
-func getADSBData(host string) (*ADSBData, error) {
-	var err error
-
-	var req *http.Request
-
-	var res *http.Response
-
-	aircraftDataURL := url.URL{
-		Scheme: "http",
-		Host:   net.JoinHostPort(host, "8080"),
-		Path:   "/data/aircraft.json",
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*500)
-	defer cancel()
-
-	req, err = http.NewRequestWithContext(ctx, http.MethodGet, aircraftDataURL.String(), nil)
-	if err != nil {
-		return &ADSBData{}, fmt.Errorf("error creating http req: %w", err)
-	}
-
-	res, err = http.DefaultClient.Do(req)
-	if err != nil {
-		return &ADSBData{}, fmt.Errorf("error making http request: %w", err)
-	}
-
-	defer res.Body.Close()
-
-	if res.StatusCode != http.StatusOK {
-		slog.ErrorContext(ctx, "bad status making request", "status", res.StatusCode)
-
-		return &ADSBData{}, fmt.Errorf("bad status making request: %w", err)
-	}
-
-	defer func(Body io.ReadCloser) {
-		_ = Body.Close()
-	}(res.Body)
-
-	var body []byte
-
-	body, err = io.ReadAll(res.Body)
-	if err != nil {
-		return &ADSBData{}, fmt.Errorf("error reading response body: %w", err)
-	}
-
-	var myADSBData ADSBData
-
-	err = json.Unmarshal(body, &myADSBData)
-	if err != nil {
-		return &ADSBData{}, fmt.Errorf("failed unmarshalling: %w", err)
-	}
-
-	return &myADSBData, nil
-}
-
-func findClosest(myADSBData ADSBData, myLatFloat float64, myLonFloat float64) (Aircraft, float64) {
-	myLoc := geodist.Coord{Lat: myLatFloat, Lon: myLonFloat}
-
-	var closestDist = math.MaxFloat64
-
-	var closestPlane Aircraft
-
-	for _, flight := range myADSBData.Planes {
-		planeLoc := geodist.Coord{Lat: flight.Latitude, Lon: flight.Longitude}
-
-		distanceMiles, _ := geodist.HaversineDistance(myLoc, planeLoc)
-		if distanceMiles < closestDist {
-			closestDist = distanceMiles
-			closestPlane = flight
-		}
-	}
-
-	return closestPlane, closestDist
-}
-
-func getAndUpdateStats(stats *stage2stats, host string) {
-	newStats, err := getStage2Stats(host)
+func getAndUpdateStats(stats *adsb.Stage2stats, host string) {
+	newStats, err := adsb.GetStage2Stats(host)
 	if err != nil {
 		fmt.Printf("error: %s\n", err)
 	} else {
@@ -239,65 +123,12 @@ func getAndUpdateStats(stats *stage2stats, host string) {
 	}
 }
 
-func getStage2Stats(host string) (*stage2stats, error) {
-	var err error
-
-	var req *http.Request
-
-	var res *http.Response
-
-	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*500)
-	defer cancel()
-
-	statsDataURL := url.URL{
-		Scheme: "http",
-		Host:   host,
-		Path:   "/api/stage2_stats",
-	}
-
-	req, err = http.NewRequestWithContext(ctx, http.MethodGet, statsDataURL.String(), nil)
-	if err != nil {
-		return nil, fmt.Errorf("error creating http req: %w", err)
-	}
-
-	res, err = http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("error making http request: %w", err)
-	}
-
-	if res.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("bad status making request: %w", err)
-	}
-
-	defer res.Body.Close()
-
-	var body []byte
-
-	body, err = io.ReadAll(res.Body)
-	if err != nil {
-		return nil, fmt.Errorf("error reading response body: %w", err)
-	}
-
-	var foundStage2Stats []stage2stats
-
-	err = json.Unmarshal(body, &foundStage2Stats)
-	if err != nil {
-		return nil, fmt.Errorf("error unmarshalling: %w", err)
-	}
-
-	if len(foundStage2Stats) < 1 {
-		return nil, ErrFailedToGetStats
-	}
-
-	return &foundStage2Stats[0], nil
-}
-
 func buildDisplayInfoAndUpdateDisplay(
-	myADSBData *ADSBData,
-	stats *stage2stats,
+	myADSBData *adsb.Data,
+	stats *adsb.Stage2stats,
 	myLatFloat float64,
 	myLonFloat float64,
-	oled *goi2coled.I2c,
+	oledData *goi2coled.I2c,
 ) {
 	var numPlanes int
 
@@ -312,7 +143,7 @@ func buildDisplayInfoAndUpdateDisplay(
 	}
 
 	if len(myADSBData.Planes) > 0 {
-		closestPlane, dist := findClosest(*myADSBData, myLatFloat, myLonFloat)
+		closestPlane, dist := adsb.FindClosest(*myADSBData, myLatFloat, myLonFloat)
 
 		closest := strings.TrimSpace(closestPlane.CallSign)
 		if closest == "" {
@@ -327,79 +158,13 @@ func buildDisplayInfoAndUpdateDisplay(
 		}
 	}
 
-	updateDisplayLines(dispLines, oled)
+	oled.UpdateDisplayLines(dispLines, oledData)
 }
 
-func initDisplay() *goi2coled.I2c {
-	// Initialize the OLED display with the provided parameters
-	oled, err := goi2coled.NewI2c(ssd1306.SSD1306_SWITCHCAPVCC, 64, 128, 0x3C, 1)
-	if err != nil {
-		panic(err)
-	}
-
-	black := color.RGBA{
-		R: 0,
-		G: 0,
-		B: 0,
-		A: 255,
-	}
-
-	// Set the entire OLED image to black
-	draw.Draw(oled.Img, oled.Img.Bounds(), &image.Uniform{C: black}, image.Point{}, draw.Src)
-
-	return oled
-}
-
-func clearDisplay(oled *goi2coled.I2c) {
-	draw.Draw(oled.Img, oled.Img.Bounds(), &image.Uniform{C: color.Black}, image.Point{}, draw.Src)
-	oled.Clear()
-	oled.Draw()
-	_ = oled.Display()
-}
-
-func updateDisplayLines(dispLines displayLines, oled *goi2coled.I2c) {
-	fontHeight := basicfont.Face7x13.Metrics().Height
-
-	var err error
-
-	var drawer *font.Drawer
-
-	point := fixed.Point26_6{
-		X: fixed.Int26_6(0 * 64),
-		Y: fixed.Int26_6(15 * 64),
-	} // x = 0, y = 15
-
-	drawer = &font.Drawer{
-		Dst:  oled.Img,
-		Src:  &image.Uniform{C: color.RGBA{R: 255, G: 255, B: 255, A: 255}},
-		Face: basicfont.Face7x13,
-		Dot:  point,
-	}
-
-	draw.Draw(oled.Img, oled.Img.Bounds(), &image.Uniform{C: color.Black}, image.Point{}, draw.Src)
-
-	for i, line := range dispLines {
-		if line == "" || i > 5 {
-			break
-		}
-
-		drawer.DrawString(line)
-		drawer.Dot.X = fixed.Int26_6(0)
-		drawer.Dot.Y += fontHeight
-	}
-
-	oled.Draw()
-
-	err = oled.Display()
-	if err != nil {
-		fmt.Printf("error: %s\n", err)
-	}
-}
-
-func cleanup(oled *goi2coled.I2c) {
+func cleanup(oledData *goi2coled.I2c) {
 	fmt.Printf("Clearing screen\n")
-	clearDisplay(oled)
+	oled.ClearDisplay(oledData)
 	time.Sleep(time.Millisecond * 500) // wait for other go routines to finish
 
-	_ = oled.Close()
+	_ = oledData.Close()
 }
