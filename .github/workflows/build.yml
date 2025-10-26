@@ -78,3 +78,11 @@ jobs:
       - name: tar arm64-Linux
         run: tar -czvf ../luma-adsb-${{ github.ref_name }}-arm64-linux.tar.gz luma-adsb
         working-directory: artifacts/arm64-linux
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Release ${{ github.ref_name }}
+          tag_name: ${{ github.ref_name }}
+          files: artifacts/*.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
