@@ -8,6 +8,8 @@ Displays the ADSB data on the SSD1306 display
 
 # Usage
 
+Set `dtparam=i2c_arm=on,i2c_arm_baudrate=400000` in `/boot/firmware/config.txt` and reboot.
+
 Set the following environment variables:
 
 `ADSBFEED_HOST`: hostname or IP of adsb.im host

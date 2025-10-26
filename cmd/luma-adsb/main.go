@@ -15,8 +15,10 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/jftuga/geodist"
@@ -52,26 +54,6 @@ type ADSBData struct {
 }
 
 type displayLines []string
-
-func initDisplay() *goi2coled.I2c {
-	// Initialize the OLED display with the provided parameters
-	oled, err := goi2coled.NewI2c(ssd1306.SSD1306_SWITCHCAPVCC, 64, 128, 0x3C, 1)
-	if err != nil {
-		panic(err)
-	}
-
-	black := color.RGBA{
-		R: 0,
-		G: 0,
-		B: 0,
-		A: 255,
-	}
-
-	// Set the entire OLED image to black
-	draw.Draw(oled.Img, oled.Img.Bounds(), &image.Uniform{C: black}, image.Point{}, draw.Src)
-
-	return oled
-}
 
 func main() {
 	var err error
@@ -121,10 +103,11 @@ func main() {
 		os.Exit(1)
 	}
 
+	sigChan := make(chan os.Signal, 1)
+
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM, syscall.SIGINT, syscall.SIGABRT, syscall.SIGBUS)
+
 	oled := initDisplay()
-	defer func(oled *goi2coled.I2c) {
-		_ = oled.Close()
-	}(oled)
 
 	stats := stage2stats{
 		Pps:         0,
@@ -138,9 +121,18 @@ func main() {
 		Planes: make([]Aircraft, 0),
 	}
 
-	displayTicker := time.NewTicker(500 * time.Millisecond) // faster than 300ms causes issues
+	displayTicker := time.NewTicker(200 * time.Millisecond) // faster than 200ms causes issues
 	stage2Ticker := time.NewTicker(1 * time.Second)
 	aircraftDataTicker := time.NewTicker(1 * time.Second)
+
+	go func() {
+		<-sigChan
+		displayTicker.Stop()
+		stage2Ticker.Stop()
+		aircraftDataTicker.Stop()
+		cleanup(oled)
+		os.Exit(0)
+	}()
 
 	for {
 		select {
@@ -257,9 +249,13 @@ func getStage2Stats(host string) (*stage2stats, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*500)
 	defer cancel()
 
-	url := fmt.Sprintf("http://%s/api/stage2_stats", host)
+	statsDataURL := url.URL{
+		Scheme: "http",
+		Host:   host,
+		Path:   "/api/stage2_stats",
+	}
 
-	req, err = http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req, err = http.NewRequestWithContext(ctx, http.MethodGet, statsDataURL.String(), nil)
 	if err != nil {
 		return nil, fmt.Errorf("error creating http req: %w", err)
 	}
@@ -334,8 +330,31 @@ func buildDisplayInfoAndUpdateDisplay(
 	updateDisplayLines(dispLines, oled)
 }
 
+func initDisplay() *goi2coled.I2c {
+	// Initialize the OLED display with the provided parameters
+	oled, err := goi2coled.NewI2c(ssd1306.SSD1306_SWITCHCAPVCC, 64, 128, 0x3C, 1)
+	if err != nil {
+		panic(err)
+	}
+
+	black := color.RGBA{
+		R: 0,
+		G: 0,
+		B: 0,
+		A: 255,
+	}
+
+	// Set the entire OLED image to black
+	draw.Draw(oled.Img, oled.Img.Bounds(), &image.Uniform{C: black}, image.Point{}, draw.Src)
+
+	return oled
+}
+
 func clearDisplay(oled *goi2coled.I2c) {
 	draw.Draw(oled.Img, oled.Img.Bounds(), &image.Uniform{C: color.Black}, image.Point{}, draw.Src)
+	oled.Clear()
+	oled.Draw()
+	_ = oled.Display()
 }
 
 func updateDisplayLines(dispLines displayLines, oled *goi2coled.I2c) {
@@ -357,7 +376,7 @@ func updateDisplayLines(dispLines displayLines, oled *goi2coled.I2c) {
 		Dot:  point,
 	}
 
-	clearDisplay(oled)
+	draw.Draw(oled.Img, oled.Img.Bounds(), &image.Uniform{C: color.Black}, image.Point{}, draw.Src)
 
 	for i, line := range dispLines {
 		if line == "" || i > 5 {
@@ -377,4 +396,12 @@ func updateDisplayLines(dispLines displayLines, oled *goi2coled.I2c) {
 	if err != nil {
 		fmt.Printf("error: %s\n", err)
 	}
+}
+
+func cleanup(oled *goi2coled.I2c) {
+	fmt.Printf("Clearing screen\n")
+	clearDisplay(oled)
+	time.Sleep(time.Millisecond * 500) // wait for other go routines to finish
+
+	_ = oled.Close()
 }
