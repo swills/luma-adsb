@@ -61,6 +61,42 @@ func main() {
 		initError = true
 	}
 
+	minAltStr := os.Getenv("ADSBFEED_MIN_ALT")
+	if minAltStr == "" {
+		fmt.Printf("ADSBFEED_MIN_ALT not set (probably something like \"50\")\n")
+		initError = true
+	}
+
+	minAltFloat, err := strconv.ParseFloat(minAltStr, 64)
+	if err != nil {
+		fmt.Printf("error parsing ADSBFEED_MIN_ALT: %s\n", err)
+		initError = true
+	}
+
+	maxAltStr := os.Getenv("ADSBFEED_MAX_ALT")
+	if maxAltStr == "" {
+		fmt.Printf("ADSBFEED_MAX_ALT not set (probably something like \"5000\")\n")
+		initError = true
+	}
+
+	maxAltFloat, err := strconv.ParseFloat(maxAltStr, 64)
+	if err != nil {
+		fmt.Printf("error parsing ADSBFEED_MAX_ALT: %s\n", err)
+		initError = true
+	}
+
+	maxDistStr := os.Getenv("ADSBFEED_MAX_DISTANCE")
+	if maxDistStr == "" {
+		fmt.Printf("ADSBFEED_MAX_DISTANCE not set (probably something like \"0.5\")\n")
+		initError = true
+	}
+
+	maxDistFloat, err := strconv.ParseFloat(maxDistStr, 64)
+	if err != nil {
+		fmt.Printf("error parsing ADSBFEED_MAX_DISTANCE: %s\n", err)
+		initError = true
+	}
+
 	if initError {
 		os.Exit(1)
 	}
@@ -103,7 +139,15 @@ func main() {
 		case <-aircraftDataTicker.C:
 			go getAndUpdateADSBData(&myADSBData, host)
 		case <-displayTicker.C:
-			go buildDisplayInfoAndUpdateDisplay(&myADSBData, &stats, myLatFloat, myLonFloat, oledData)
+			go buildDisplayInfoAndUpdateDisplay(
+				&myADSBData,
+				&stats,
+				myLatFloat,
+				myLonFloat,
+				minAltFloat,
+				maxAltFloat,
+				maxDistFloat,
+				oledData)
 		}
 	}
 }
@@ -133,6 +177,9 @@ func buildDisplayInfoAndUpdateDisplay(
 	stats *adsb.Stage2stats,
 	myLatFloat float64,
 	myLonFloat float64,
+	minAltitude float64,
+	maxAltitude float64,
+	maxDistance float64,
 	oledData *goi2coled.I2c,
 ) {
 	var numPlanes int
@@ -147,8 +194,39 @@ func buildDisplayInfoAndUpdateDisplay(
 		fmt.Sprintf("%s P: %d", time.Now().Format("15:04:05"), numPlanes),
 	}
 
+	var audible bool
+
 	if len(myADSBData.Planes) > 0 {
 		closestPlane, dist := adsb.FindClosest(*myADSBData, myLatFloat, myLonFloat)
+
+		if closestPlane.Category != "" {
+			minAltitudeCat, maxAltitudeCat, maxDistanceCat := getCategoryOverrides(closestPlane.Category)
+			if minAltitudeCat != 0 {
+				minAltitude = minAltitudeCat
+			}
+			if maxAltitudeCat != 0 {
+				minAltitude = maxAltitudeCat
+			}
+			if maxDistanceCat != 0 {
+				maxDistance = maxDistanceCat
+			}
+		}
+
+		altitudeNum, valid := closestPlane.Altitude.(float64)
+		if !valid {
+			switch closestPlane.Altitude.(type) {
+			case nil:
+				altitudeNum = 0
+			case string:
+				if closestPlane.Altitude == "ground" {
+					altitudeNum = 0
+				}
+			}
+		}
+
+		if altitudeNum >= minAltitude && altitudeNum <= maxAltitude && dist < maxDistance {
+			audible = true
+		}
 
 		closest := strings.TrimSpace(closestPlane.CallSign)
 		if closest == "" {
@@ -157,13 +235,17 @@ func buildDisplayInfoAndUpdateDisplay(
 
 		dispLines = append(dispLines, fmt.Sprintf("%s (%s)", closest, closestPlane.Hex))
 		if closestPlane.Category != "" {
-			dispLines = append(dispLines, fmt.Sprintf("%2.2fmi (%s)", dist, closestPlane.Category))
+			dispLines = append(dispLines, fmt.Sprintf("%3.1fmi (%s)", dist, closestPlane.Category))
 		} else {
-			dispLines = append(dispLines, fmt.Sprintf("%2.2fmi", dist))
+			dispLines = append(dispLines, fmt.Sprintf("%3.1fmi", dist))
 		}
 
 		if _, ok := closestPlane.Altitude.(float64); ok {
-			dispLines = append(dispLines, messagePrinter.Sprintf("%5.0fft", closestPlane.Altitude))
+			if audible {
+				dispLines = append(dispLines, messagePrinter.Sprintf("%5.0fft (close)", closestPlane.Altitude))
+			} else {
+				dispLines = append(dispLines, messagePrinter.Sprintf("%5.0fft", closestPlane.Altitude))
+			}
 		}
 	}
 
@@ -178,4 +260,38 @@ func cleanup(oledData *goi2coled.I2c) {
 	_, _ = oledData.DisplayOff()
 
 	_ = oledData.Close()
+}
+
+func getCategoryOverrides(category string) (float64, float64, float64) {
+	var minAltFloat float64
+
+	var maxAltFloat float64
+
+	var maxDistFloat float64
+
+	minAltStr := os.Getenv(fmt.Sprintf("ADSBFEED_MIN_ALT_CATEGORY_%s", category))
+	if minAltStr != "" {
+		minAltFloatTmp, err := strconv.ParseFloat(minAltStr, 64)
+		if err == nil {
+			minAltFloat = minAltFloatTmp
+		}
+	}
+
+	maxAltStr := os.Getenv(fmt.Sprintf("ADSBFEED_MAX_ALT_CATEGORY_%s", category))
+	if maxAltStr != "" {
+		maxAltFloatTmp, err := strconv.ParseFloat(maxAltStr, 64)
+		if err == nil {
+			maxAltFloat = maxAltFloatTmp
+		}
+	}
+
+	distAltStr := os.Getenv(fmt.Sprintf("ADSBFEED_MAX_DISTANCE_CATEGORY_%s", category))
+	if distAltStr != "" {
+		distAltFloatTmp, err := strconv.ParseFloat(distAltStr, 64)
+		if err == nil {
+			maxDistFloat = distAltFloatTmp
+		}
+	}
+
+	return minAltFloat, maxAltFloat, maxDistFloat
 }
