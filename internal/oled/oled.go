@@ -20,11 +20,9 @@ func InitDisplay() *goi2coled.I2c {
 		panic(err)
 	}
 
-	black := color.RGBA{
-		R: 0,
-		G: 0,
-		B: 0,
-		A: 255,
+	_, err = oled.DisplayOn()
+	if err != nil {
+		panic(err)
 	}
 
 	// Set the entire OLED image to black

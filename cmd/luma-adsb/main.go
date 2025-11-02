@@ -175,5 +175,7 @@ func cleanup(oledData *goi2coled.I2c) {
 	oled.ClearDisplay(oledData)
 	time.Sleep(time.Millisecond * 500) // wait for other go routines to finish
 
+	_, _ = oledData.DisplayOff()
+
 	_ = oledData.Close()
 }
