@@ -20,6 +20,7 @@ func FindClosest(myADSBData Data, myLatFloat float64, myLonFloat float64) (Aircr
 		if err != nil {
 			return closestPlane, 0
 		}
+
 		if distanceMiles < closestDist {
 			closestDist = distanceMiles
 			closestPlane = flight
