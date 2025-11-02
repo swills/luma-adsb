@@ -12,10 +12,22 @@ Set `dtparam=i2c_arm=on,i2c_arm_baudrate=400000` in `/boot/firmware/config.txt` 
 
 Set the following environment variables:
 
-`ADSBFEED_HOST`: hostname or IP of adsb.im host
+`LUMAADSB_HOST`: hostname or IP of adsb.im host
 
-`ADSBFEED_LAT`: Latitude of the host
+`LUMAADSB_LAT`: Latitude of the host
 
-`ADSBFEED_LON`: Longitude of the host
+`LUMAADSB_LON`: Longitude of the host
+
+`LUMAADSB_MAX_ALT`: Max altitude to consider "close"
+
+`LUMAADSB_MAX_DISTANCE`: Max distance to consider "close"
+
+`LUMAADSB_MIN_ALT`: Min altitude to consider "close"
+
+The "close" parameters can also be customized per category by suffixing the category, for example:
+
+`LUMAADSB_MAX_DISTANCE_CATEGORY_A1`: Max distance for A1
+
+`LUMAADSB_MAX_ALT_CATEGORY_A3`: Max altitude for A3
 
 Then run `./luma-adsb`

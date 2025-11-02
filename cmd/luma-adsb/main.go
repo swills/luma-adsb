@@ -83,79 +83,79 @@ func initEnv() (bool, string, float64, float64, float64, float64, float64) {
 
 	var myLonFloat float64
 
-	host := os.Getenv("ADSBFEED_HOST")
+	host := os.Getenv("LUMAADSB_HOST")
 	if host == "" {
-		fmt.Printf("ADSBFEED_HOST not set (probably YOURHOSTNAME)\n")
+		fmt.Printf("LUMAADSB_HOST not set (probably YOURHOSTNAME)\n")
 
 		initError = true
 	}
 
-	myLatStr := os.Getenv("ADSBFEED_LAT")
+	myLatStr := os.Getenv("LUMAADSB_LAT")
 	if myLatStr == "" {
-		fmt.Printf("ADSBFEED_LAT not set (probably something like \"12.345678\")\n")
+		fmt.Printf("LUMAADSB_LAT not set (probably something like \"12.345678\")\n")
 
 		initError = true
 	}
 
 	myLatFloat, err = strconv.ParseFloat(myLatStr, 64)
 	if err != nil {
-		fmt.Printf("error parsing ADSBFEED_LAT: %s\n", err)
+		fmt.Printf("error parsing LUMAADSB_LAT: %s\n", err)
 
 		initError = true
 	}
 
-	myLonStr := os.Getenv("ADSBFEED_LON")
+	myLonStr := os.Getenv("LUMAADSB_LON")
 	if myLonStr == "" {
-		fmt.Printf("ADSBFEED_LON not set (probably something lke \"12.345678\")\n")
+		fmt.Printf("LUMAADSB_LON not set (probably something lke \"12.345678\")\n")
 
 		initError = true
 	}
 
 	myLonFloat, err = strconv.ParseFloat(myLonStr, 64)
 	if err != nil {
-		fmt.Printf("error parsing ADSBFEED_LON: %s\n", err)
+		fmt.Printf("error parsing LUMAADSB_LON: %s\n", err)
 
 		initError = true
 	}
 
-	minAltStr := os.Getenv("ADSBFEED_MIN_ALT")
+	minAltStr := os.Getenv("LUMAADSB_MIN_ALT")
 	if minAltStr == "" {
-		fmt.Printf("ADSBFEED_MIN_ALT not set (probably something like \"50\")\n")
+		fmt.Printf("LUMAADSB_MIN_ALT not set (probably something like \"50\")\n")
 
 		initError = true
 	}
 
 	minAltFloat, err := strconv.ParseFloat(minAltStr, 64)
 	if err != nil {
-		fmt.Printf("error parsing ADSBFEED_MIN_ALT: %s\n", err)
+		fmt.Printf("error parsing LUMAADSB_MIN_ALT: %s\n", err)
 
 		initError = true
 	}
 
-	maxAltStr := os.Getenv("ADSBFEED_MAX_ALT")
+	maxAltStr := os.Getenv("LUMAADSB_MAX_ALT")
 	if maxAltStr == "" {
-		fmt.Printf("ADSBFEED_MAX_ALT not set (probably something like \"5000\")\n")
+		fmt.Printf("LUMAADSB_MAX_ALT not set (probably something like \"5000\")\n")
 
 		initError = true
 	}
 
 	maxAltFloat, err := strconv.ParseFloat(maxAltStr, 64)
 	if err != nil {
-		fmt.Printf("error parsing ADSBFEED_MAX_ALT: %s\n", err)
+		fmt.Printf("error parsing LUMAADSB_MAX_ALT: %s\n", err)
 
 		initError = true
 	}
 
-	maxDistStr := os.Getenv("ADSBFEED_MAX_DISTANCE")
+	maxDistStr := os.Getenv("LUMAADSB_MAX_DISTANCE")
 	if maxDistStr == "" {
-		fmt.Printf("ADSBFEED_MAX_DISTANCE not set (probably something like \"0.5\")\n")
+		fmt.Printf("LUMAADSB_MAX_DISTANCE not set (probably something like \"0.5\")\n")
 
 		initError = true
 	}
 
 	maxDistFloat, err := strconv.ParseFloat(maxDistStr, 64)
 	if err != nil {
-		fmt.Printf("error parsing ADSBFEED_MAX_DISTANCE: %s\n", err)
+		fmt.Printf("error parsing LUMAADSB_MAX_DISTANCE: %s\n", err)
 
 		initError = true
 	}
@@ -297,7 +297,7 @@ func getCategoryOverrides(category string) (float64, float64, float64) {
 
 	var maxDistFloat float64
 
-	minAltStr := os.Getenv("ADSBFEED_MIN_ALT_CATEGORY_" + category)
+	minAltStr := os.Getenv("LUMAADSB_MIN_ALT_CATEGORY_" + category)
 	if minAltStr != "" {
 		minAltFloatTmp, err := strconv.ParseFloat(minAltStr, 64)
 		if err == nil {
@@ -305,7 +305,7 @@ func getCategoryOverrides(category string) (float64, float64, float64) {
 		}
 	}
 
-	maxAltStr := os.Getenv("ADSBFEED_MAX_ALT_CATEGORY_" + category)
+	maxAltStr := os.Getenv("LUMAADSB_MAX_ALT_CATEGORY_" + category)
 	if maxAltStr != "" {
 		maxAltFloatTmp, err := strconv.ParseFloat(maxAltStr, 64)
 		if err == nil {
@@ -313,7 +313,7 @@ func getCategoryOverrides(category string) (float64, float64, float64) {
 		}
 	}
 
-	distAltStr := os.Getenv("ADSBFEED_MAX_DISTANCE_CATEGORY_" + category)
+	distAltStr := os.Getenv("LUMAADSB_MAX_DISTANCE_CATEGORY_" + category)
 	if distAltStr != "" {
 		distAltFloatTmp, err := strconv.ParseFloat(distAltStr, 64)
 		if err == nil {
