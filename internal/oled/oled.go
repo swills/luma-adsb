@@ -26,7 +26,7 @@ func InitDisplay() *goi2coled.I2c {
 	}
 
 	// Set the entire OLED image to black
-	draw.Draw(oled.Img, oled.Img.Bounds(), &image.Uniform{C: black}, image.Point{}, draw.Src)
+	draw.Draw(oled.Img, oled.Img.Bounds(), &image.Uniform{C: color.Black}, image.Point{}, draw.Src)
 
 	return oled
 }
@@ -52,7 +52,7 @@ func UpdateDisplayLines(dispLines []string, oled *goi2coled.I2c) {
 
 	drawer = &font.Drawer{
 		Dst:  oled.Img,
-		Src:  &image.Uniform{C: color.RGBA{R: 255, G: 255, B: 255, A: 255}},
+		Src:  &image.Uniform{C: color.White},
 		Face: basicfont.Face7x13,
 		Dot:  point,
 	}
