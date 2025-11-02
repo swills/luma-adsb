@@ -12,6 +12,9 @@ import (
 	"github.com/swills/luma-adsb/internal/adsb"
 	"github.com/swills/luma-adsb/internal/oled"
 	goi2coled "github.com/waxdred/go-i2c-oled"
+
+	"golang.org/x/text/language"
+	"golang.org/x/text/message"
 )
 
 func main() {
@@ -123,6 +126,8 @@ func getAndUpdateStats(stats *adsb.Stage2stats, host string) {
 	}
 }
 
+var messagePrinter = message.NewPrinter(language.English)
+
 func buildDisplayInfoAndUpdateDisplay(
 	myADSBData *adsb.Data,
 	stats *adsb.Stage2stats,
@@ -150,11 +155,15 @@ func buildDisplayInfoAndUpdateDisplay(
 			closest = "none"
 		}
 
-		dispLines = append(dispLines, fmt.Sprintf("C: %s (%s)", closest, closestPlane.Hex))
+		dispLines = append(dispLines, fmt.Sprintf("%s (%s)", closest, closestPlane.Hex))
 		if closestPlane.Category != "" {
-			dispLines = append(dispLines, fmt.Sprintf("D: %2.2f (%s)", dist, closestPlane.Category))
+			dispLines = append(dispLines, fmt.Sprintf("%2.2fmi (%s)", dist, closestPlane.Category))
 		} else {
-			dispLines = append(dispLines, fmt.Sprintf("D: %2.2f", dist))
+			dispLines = append(dispLines, fmt.Sprintf("%2.2fmi", dist))
+		}
+
+		if _, ok := closestPlane.Altitude.(float64); ok {
+			dispLines = append(dispLines, messagePrinter.Sprintf("%5.0fft", closestPlane.Altitude))
 		}
 	}
 
