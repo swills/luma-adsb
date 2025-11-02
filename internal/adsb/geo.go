@@ -16,7 +16,10 @@ func FindClosest(myADSBData Data, myLatFloat float64, myLonFloat float64) (Aircr
 	for _, flight := range myADSBData.Planes {
 		planeLoc := geodist.Coord{Lat: flight.Latitude, Lon: flight.Longitude}
 
-		distanceMiles, _ := geodist.HaversineDistance(myLoc, planeLoc)
+		distanceMiles, _, err := geodist.VincentyDistance(myLoc, planeLoc)
+		if err != nil {
+			return closestPlane, 0
+		}
 		if distanceMiles < closestDist {
 			closestDist = distanceMiles
 			closestPlane = flight
