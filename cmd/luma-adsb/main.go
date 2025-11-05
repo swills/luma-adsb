@@ -75,6 +75,7 @@ func main() {
 	}
 }
 
+//nolint:funlen
 func initEnv() (bool, string, float64, float64, float64, float64, float64, float64) {
 	var err error
 
@@ -226,12 +227,14 @@ func buildDisplayInfoAndUpdateDisplay(
 	var audible bool
 
 	if len(myADSBData.Planes) > 0 {
-		dispLines = addClosest(myADSBData, myLatFloat, myLonFloat, myAltFloat, minAltitude, maxDistance, maxAltitude, audible, dispLines)
+		dispLines = addClosest(myADSBData, myLatFloat, myLonFloat, myAltFloat, minAltitude,
+			maxDistance, maxAltitude, audible, dispLines)
 	}
 
 	oled.UpdateDisplayLines(dispLines, oledData)
 }
 
+//nolint:cyclop
 func addClosest(
 	myADSBData *adsb.Data,
 	myLatFloat float64,
@@ -277,6 +280,7 @@ func addClosest(
 	}
 
 	closest := strings.TrimSpace(closestPlane.CallSign)
+	//nolint:nestif
 	if closestPlane.Hex != "" {
 		if closest == "" {
 			closest = "none"

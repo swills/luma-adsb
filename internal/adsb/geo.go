@@ -17,6 +17,7 @@ func FindClosest(myADSBData Data, myLatFloat, myLonFloat, myAltFloat float64) (A
 		if flight.Latitude == 0 || flight.Longitude == 0 {
 			continue
 		}
+
 		planeLoc := geodist.Coord{Lat: flight.Latitude, Lon: flight.Longitude}
 
 		distanceMiles, _, err := geodist.VincentyDistance(myLoc, planeLoc)
