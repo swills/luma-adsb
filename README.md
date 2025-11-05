@@ -18,6 +18,8 @@ Set the following environment variables:
 
 `LUMAADSB_LON`: Longitude of the host
 
+`LUMAADSB_ALT`: Altitude of the host
+
 `LUMAADSB_MAX_ALT`: Max altitude to consider "close"
 
 `LUMAADSB_MAX_DISTANCE`: Max distance to consider "close"

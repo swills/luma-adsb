@@ -17,7 +17,7 @@ import (
 )
 
 func main() {
-	initError, host, myLatFloat, myLonFloat, minAltFloat, maxAltFloat, maxDistFloat := initEnv()
+	initError, host, myLatFloat, myLonFloat, myAltFloat, minAltFloat, maxAltFloat, maxDistFloat := initEnv()
 
 	if initError {
 		os.Exit(1)
@@ -66,6 +66,7 @@ func main() {
 				&stats,
 				myLatFloat,
 				myLonFloat,
+				myAltFloat,
 				minAltFloat,
 				maxAltFloat,
 				maxDistFloat,
@@ -74,7 +75,7 @@ func main() {
 	}
 }
 
-func initEnv() (bool, string, float64, float64, float64, float64, float64) {
+func initEnv() (bool, string, float64, float64, float64, float64, float64, float64) {
 	var err error
 
 	var initError bool
@@ -82,6 +83,8 @@ func initEnv() (bool, string, float64, float64, float64, float64, float64) {
 	var myLatFloat float64
 
 	var myLonFloat float64
+
+	var myAltFloat float64
 
 	host := os.Getenv("LUMAADSB_HOST")
 	if host == "" {
@@ -114,6 +117,20 @@ func initEnv() (bool, string, float64, float64, float64, float64, float64) {
 	myLonFloat, err = strconv.ParseFloat(myLonStr, 64)
 	if err != nil {
 		fmt.Printf("error parsing LUMAADSB_LON: %s\n", err)
+
+		initError = true
+	}
+
+	myAltStr := os.Getenv("LUMAADSB_ALT")
+	if myAltStr == "" {
+		fmt.Printf("LUMAADSB_ALT not set (probably something lke \"12345\")\n")
+
+		initError = true
+	}
+
+	myAltFloat, err = strconv.ParseFloat(myAltStr, 64)
+	if err != nil {
+		fmt.Printf("error parsing LUMAADSB_ALT: %s\n", err)
 
 		initError = true
 	}
@@ -160,7 +177,7 @@ func initEnv() (bool, string, float64, float64, float64, float64, float64) {
 		initError = true
 	}
 
-	return initError, host, myLatFloat, myLonFloat, minAltFloat, maxAltFloat, maxDistFloat
+	return initError, host, myLatFloat, myLonFloat, myAltFloat, minAltFloat, maxAltFloat, maxDistFloat
 }
 
 func getAndUpdateADSBData(data *adsb.Data, host string) {
@@ -188,6 +205,7 @@ func buildDisplayInfoAndUpdateDisplay(
 	stats *adsb.Stage2stats,
 	myLatFloat float64,
 	myLonFloat float64,
+	myAltFloat float64,
 	minAltitude float64,
 	maxAltitude float64,
 	maxDistance float64,
@@ -208,7 +226,7 @@ func buildDisplayInfoAndUpdateDisplay(
 	var audible bool
 
 	if len(myADSBData.Planes) > 0 {
-		dispLines = addClosest(myADSBData, myLatFloat, myLonFloat, minAltitude, maxDistance, maxAltitude, audible, dispLines)
+		dispLines = addClosest(myADSBData, myLatFloat, myLonFloat, myAltFloat, minAltitude, maxDistance, maxAltitude, audible, dispLines)
 	}
 
 	oled.UpdateDisplayLines(dispLines, oledData)
@@ -218,13 +236,14 @@ func addClosest(
 	myADSBData *adsb.Data,
 	myLatFloat float64,
 	myLonFloat float64,
+	myAltFloat float64,
 	minAltitude float64,
 	maxDistance float64,
 	maxAltitude float64,
 	audible bool,
 	dispLines []string,
 ) []string {
-	closestPlane, dist := adsb.FindClosest(*myADSBData, myLatFloat, myLonFloat)
+	closestPlane, dist := adsb.FindClosest(*myADSBData, myLatFloat, myLonFloat, myAltFloat)
 
 	if closestPlane.Category != "" {
 		minAltitudeCat, maxAltitudeCat, maxDistanceCat := getCategoryOverrides(closestPlane.Category)
@@ -258,22 +277,25 @@ func addClosest(
 	}
 
 	closest := strings.TrimSpace(closestPlane.CallSign)
-	if closest == "" {
-		closest = "none"
-	}
+	if closestPlane.Hex != "" {
+		if closest == "" {
+			closest = "none"
+		}
 
-	dispLines = append(dispLines, fmt.Sprintf("%s (%s)", closest, closestPlane.Hex))
-	if closestPlane.Category != "" {
-		dispLines = append(dispLines, fmt.Sprintf("%3.1fmi (%s)", dist, closestPlane.Category))
-	} else {
-		dispLines = append(dispLines, fmt.Sprintf("%3.1fmi", dist))
-	}
+		dispLines = append(dispLines, fmt.Sprintf("%s (%s)", closest, closestPlane.Hex))
 
-	if _, ok := closestPlane.Altitude.(float64); ok {
-		if audible {
-			dispLines = append(dispLines, messagePrinter.Sprintf("%5.0fft (close)", closestPlane.Altitude))
+		if closestPlane.Category != "" {
+			dispLines = append(dispLines, fmt.Sprintf("%3.1fmi (%s)", dist, closestPlane.Category))
 		} else {
-			dispLines = append(dispLines, messagePrinter.Sprintf("%5.0fft", closestPlane.Altitude))
+			dispLines = append(dispLines, fmt.Sprintf("%3.1fmi", dist))
+		}
+
+		if _, ok := closestPlane.Altitude.(float64); ok {
+			if audible {
+				dispLines = append(dispLines, messagePrinter.Sprintf("%5.0fft (close)", closestPlane.Altitude))
+			} else {
+				dispLines = append(dispLines, messagePrinter.Sprintf("%5.0fft", closestPlane.Altitude))
+			}
 		}
 	}
 
