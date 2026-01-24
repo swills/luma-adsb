@@ -214,14 +214,23 @@ func buildDisplayInfoAndUpdateDisplay(
 ) {
 	var numPlanes int
 
+	var numPlanesWithPos int
+
 	if len(myADSBData.Planes) > 0 {
+		for _, v := range myADSBData.Planes {
+			numPlanes++
+			if v.Latitude != 0 || v.Longitude != 0 {
+				numPlanesWithPos++
+			}
+		}
 		numPlanes = len(myADSBData.Planes)
 	} else {
-		numPlanes = stats.Planes
+		numPlanes = stats.TotalPlanes
+		numPlanesWithPos = stats.Planes
 	}
 
 	dispLines := []string{
-		fmt.Sprintf("%s P: %d", time.Now().Format("15:04:05"), numPlanes),
+		fmt.Sprintf("%s %d (%d)", time.Now().Format("15:04:05"), numPlanes, numPlanesWithPos),
 	}
 
 	var audible bool
