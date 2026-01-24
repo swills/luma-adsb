@@ -30,14 +30,6 @@ func main() {
 
 	oledData := oled.InitDisplay()
 
-	stats := adsb.Stage2stats{
-		Pps:         0,
-		Mps:         0,
-		Uptime:      0,
-		Planes:      0,
-		TotalPlanes: 0,
-	}
-
 	myADSBData := adsb.Data{
 		Planes: make([]adsb.Aircraft, 0),
 	}
@@ -45,17 +37,14 @@ func main() {
 	ctx := context.Background()
 
 	displayUpdateInterval := 125 * time.Millisecond // faster causes issues
-	stage2Interval := 500 * time.Millisecond
 	aircraftDataInterval := 500 * time.Millisecond
 
 	displayTicker := time.NewTicker(displayUpdateInterval)
-	stage2Ticker := time.NewTicker(stage2Interval)
 	aircraftDataTicker := time.NewTicker(aircraftDataInterval)
 
 	go func() {
 		<-sigChan
 		displayTicker.Stop()
-		stage2Ticker.Stop()
 		aircraftDataTicker.Stop()
 		cleanup(oledData)
 		os.Exit(0)
@@ -63,14 +52,11 @@ func main() {
 
 	for {
 		select {
-		case <-stage2Ticker.C:
-			go getAndUpdateStats(ctx, &stats, host, stage2Interval/2)
 		case <-aircraftDataTicker.C:
 			go getAndUpdateADSBData(ctx, &myADSBData, host, aircraftDataInterval/2)
 		case <-displayTicker.C:
 			go buildDisplayInfoAndUpdateDisplay(
 				&myADSBData,
-				&stats,
 				myLatFloat,
 				myLonFloat,
 				myAltFloat,
@@ -197,20 +183,10 @@ func getAndUpdateADSBData(ctx context.Context, data *adsb.Data, host string, tim
 	}
 }
 
-func getAndUpdateStats(ctx context.Context, stats *adsb.Stage2stats, host string, timeout time.Duration) {
-	newStats, err := adsb.GetStage2Stats(ctx, host, timeout)
-	if err != nil {
-		fmt.Printf("error: %s\n", err)
-	} else {
-		*stats = *newStats
-	}
-}
-
 var messagePrinter = message.NewPrinter(language.English)
 
 func buildDisplayInfoAndUpdateDisplay(
 	myADSBData *adsb.Data,
-	stats *adsb.Stage2stats,
 	myLatFloat float64,
 	myLonFloat float64,
 	myAltFloat float64,
@@ -223,18 +199,13 @@ func buildDisplayInfoAndUpdateDisplay(
 
 	var numPlanesWithPos int
 
-	if len(myADSBData.Planes) > 0 {
-		numPlanes = len(myADSBData.Planes)
-		for _, v := range myADSBData.Planes {
-			if v.Latitude != 0 || v.Longitude != 0 || v.Last.Latitude != 0 || v.Last.Longitude != 0 {
-				numPlanesWithPos++
-			}
+	numPlanes = len(myADSBData.Planes)
+	for _, v := range myADSBData.Planes {
+		if v.Latitude != 0 || v.Longitude != 0 || v.Last.Latitude != 0 || v.Last.Longitude != 0 {
+			numPlanesWithPos++
 		}
-		numPlanes = len(myADSBData.Planes)
-	} else {
-		numPlanes = stats.Planes
-		numPlanesWithPos = stats.Planes
 	}
+	numPlanes = len(myADSBData.Planes)
 
 	dispLines := []string{
 		fmt.Sprintf("%s %d (%d)", time.Now().Format("15:04:05"), numPlanes, numPlanesWithPos),
