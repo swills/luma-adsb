@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/signal"
@@ -41,9 +42,15 @@ func main() {
 		Planes: make([]adsb.Aircraft, 0),
 	}
 
-	displayTicker := time.NewTicker(125 * time.Millisecond) // faster causes issues
-	stage2Ticker := time.NewTicker(1 * time.Second)
-	aircraftDataTicker := time.NewTicker(1 * time.Second)
+	ctx := context.Background()
+
+	displayUpdateInterval := 125 * time.Millisecond // faster causes issues
+	stage2Interval := 500 * time.Millisecond
+	aircraftDataInterval := 500 * time.Millisecond
+
+	displayTicker := time.NewTicker(displayUpdateInterval)
+	stage2Ticker := time.NewTicker(stage2Interval)
+	aircraftDataTicker := time.NewTicker(aircraftDataInterval)
 
 	go func() {
 		<-sigChan
@@ -57,9 +64,9 @@ func main() {
 	for {
 		select {
 		case <-stage2Ticker.C:
-			go getAndUpdateStats(&stats, host)
+			go getAndUpdateStats(ctx, &stats, host, stage2Interval/2)
 		case <-aircraftDataTicker.C:
-			go getAndUpdateADSBData(&myADSBData, host)
+			go getAndUpdateADSBData(ctx, &myADSBData, host, aircraftDataInterval/2)
 		case <-displayTicker.C:
 			go buildDisplayInfoAndUpdateDisplay(
 				&myADSBData,
@@ -181,17 +188,17 @@ func initEnv() (bool, string, float64, float64, float64, float64, float64, float
 	return initError, host, myLatFloat, myLonFloat, myAltFloat, minAltFloat, maxAltFloat, maxDistFloat
 }
 
-func getAndUpdateADSBData(data *adsb.Data, host string) {
-	newADSBData, err := adsb.GetADSBData(host)
+func getAndUpdateADSBData(ctx context.Context, data *adsb.Data, host string, timeout time.Duration) {
+	newADSBData, err := adsb.GetADSBData(ctx, host, timeout)
 	if err != nil {
-		fmt.Printf("error getting adsb data: %s", err)
+		fmt.Printf("error getting adsb data: %s\n", err)
 	} else {
 		*data = *newADSBData
 	}
 }
 
-func getAndUpdateStats(stats *adsb.Stage2stats, host string) {
-	newStats, err := adsb.GetStage2Stats(host)
+func getAndUpdateStats(ctx context.Context, stats *adsb.Stage2stats, host string, timeout time.Duration) {
+	newStats, err := adsb.GetStage2Stats(ctx, host, timeout)
 	if err != nil {
 		fmt.Printf("error: %s\n", err)
 	} else {
@@ -217,15 +224,15 @@ func buildDisplayInfoAndUpdateDisplay(
 	var numPlanesWithPos int
 
 	if len(myADSBData.Planes) > 0 {
+		numPlanes = len(myADSBData.Planes)
 		for _, v := range myADSBData.Planes {
-			numPlanes++
-			if v.Latitude != 0 || v.Longitude != 0 {
+			if v.Latitude != 0 || v.Longitude != 0 || v.Last.Latitude != 0 || v.Last.Longitude != 0 {
 				numPlanesWithPos++
 			}
 		}
 		numPlanes = len(myADSBData.Planes)
 	} else {
-		numPlanes = stats.TotalPlanes
+		numPlanes = stats.Planes
 		numPlanesWithPos = stats.Planes
 	}
 

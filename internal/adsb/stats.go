@@ -21,14 +21,14 @@ type Stage2stats struct {
 	TotalPlanes int     `json:"tplanes"`
 }
 
-func GetStage2Stats(host string) (*Stage2stats, error) {
+func GetStage2Stats(ctx context.Context, host string, timeout time.Duration) (*Stage2stats, error) {
 	var err error
 
 	var req *http.Request
 
 	var res *http.Response
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*500)
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	statsDataURL := url.URL{

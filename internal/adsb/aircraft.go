@@ -12,21 +12,29 @@ import (
 	"time"
 )
 
+type LastPositionData struct {
+	Latitude  float64 `json:"lat"`
+	Longitude float64 `json:"lon"`
+	SeenPos   float64 `json:"seen_pos"`
+}
+
 type Aircraft struct {
-	Hex        string     `json:"hex"`
-	MarkerType string     `json:"type"`
-	CallSign   string     `json:"flight"`
-	Latitude   float64    `json:"lat"`
-	Longitude  float64    `json:"lon"`
-	Altitude   json.Token `json:"alt_baro"`
-	Category   string     `json:"category,omitempty"`
+	Hex        string           `json:"hex"`
+	MarkerType string           `json:"type"`
+	CallSign   string           `json:"flight"`
+	Latitude   float64          `json:"lat"`
+	Longitude  float64          `json:"lon"`
+	Altitude   json.Token       `json:"alt_baro"`
+	Last       LastPositionData `json:"lastPosition"`
+	Category   string           `json:"category,omitempty"`
 }
 
 type Data struct {
 	Planes []Aircraft `json:"aircraft"`
 }
 
-func GetADSBData(host string) (*Data, error) {
+// GetADSBData fetches aircraft.json and computes a messages/sec value using MessageRateTracker.
+func GetADSBData(ctx context.Context, host string, timeout time.Duration) (*Data, error) {
 	var err error
 
 	var req *http.Request
@@ -39,7 +47,7 @@ func GetADSBData(host string) (*Data, error) {
 		Path:   "/data/aircraft.json",
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*500)
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	req, err = http.NewRequestWithContext(ctx, http.MethodGet, aircraftDataURL.String(), nil)
