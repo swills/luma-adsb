@@ -34,13 +34,25 @@ func main() {
 		Planes: make([]adsb.Aircraft, 0),
 	}
 
+	var feederStatus map[string]adsb.FeederInfo
+
+	var updateStatus bool
+
+	var cpuTempC int
+
 	ctx := context.Background()
 
 	displayUpdateInterval := 125 * time.Millisecond // faster causes issues
 	aircraftDataInterval := 500 * time.Millisecond
+	feederStatusInterval := 30 * time.Second
+	updateStatusInterval := 5 * time.Minute
+	updateCPUTempInterval := 1 * time.Minute
 
 	displayTicker := time.NewTicker(displayUpdateInterval)
 	aircraftDataTicker := time.NewTicker(aircraftDataInterval)
+	feederStatusTicker := time.NewTicker(feederStatusInterval)
+	updateStatusTicker := time.NewTicker(updateStatusInterval)
+	updateCPUTempTicker := time.NewTicker(updateCPUTempInterval)
 
 	go func() {
 		<-sigChan
@@ -49,6 +61,9 @@ func main() {
 		cleanup(oledData)
 		os.Exit(0)
 	}()
+	go updateFeederStatus(ctx, &feederStatus, host, feederStatusInterval/2)
+	go updateUpdateStatus(ctx, &updateStatus, host, updateStatusInterval/2)
+	go updateCPUTemp(ctx, &cpuTempC, host, updateCPUTempInterval)
 
 	for {
 		select {
@@ -57,6 +72,9 @@ func main() {
 		case <-displayTicker.C:
 			go buildDisplayInfoAndUpdateDisplay(
 				&myADSBData,
+				&feederStatus,
+				&updateStatus,
+				&cpuTempC,
 				myLatFloat,
 				myLonFloat,
 				myAltFloat,
@@ -64,6 +82,12 @@ func main() {
 				maxAltFloat,
 				maxDistFloat,
 				oledData)
+		case <-feederStatusTicker.C:
+			go updateFeederStatus(ctx, &feederStatus, host, feederStatusInterval/2)
+		case <-updateStatusTicker.C:
+			go updateUpdateStatus(ctx, &updateStatus, host, updateStatusInterval/2)
+		case <-updateCPUTempTicker.C:
+			go updateCPUTemp(ctx, &cpuTempC, host, updateCPUTempInterval)
 		}
 	}
 }
@@ -183,10 +207,46 @@ func getAndUpdateADSBData(ctx context.Context, data *adsb.Data, host string, tim
 	}
 }
 
+func updateFeederStatus(ctx context.Context, feederStatus *map[string]adsb.FeederInfo, host string, timeout time.Duration) {
+	config, err := adsb.GetMicroConfig(ctx, host, timeout)
+	if err != nil {
+		fmt.Printf("error getting micro config: %s\n", err)
+		return
+	}
+
+	newFeederStatus, err := adsb.GetAllFeederStatus(ctx, host, timeout, config)
+	if err != nil {
+		fmt.Printf("error getting feeder status info: %s\n", err)
+	} else {
+		*feederStatus = *newFeederStatus
+	}
+}
+
+func updateUpdateStatus(ctx context.Context, updateStatus *bool, host string, timeout time.Duration) {
+	updateAvailable, err := adsb.GetUpdateAvailable(ctx, host, timeout)
+	if err != nil {
+		fmt.Printf("error getting update status: %s\n", err)
+	} else {
+		*updateStatus = updateAvailable
+	}
+}
+
+func updateCPUTemp(ctx context.Context, cpuTempC *int, host string, timeout time.Duration) {
+	newCPUTempC, err := adsb.GetCPUTempC(ctx, host, timeout)
+	if err != nil {
+		fmt.Printf("error getting CPU Temp: %s\n", err)
+	} else {
+		*cpuTempC = newCPUTempC
+	}
+}
+
 var messagePrinter = message.NewPrinter(language.English)
 
 func buildDisplayInfoAndUpdateDisplay(
 	myADSBData *adsb.Data,
+	feederStatus *map[string]adsb.FeederInfo,
+	updateStatus *bool,
+	cpuTemp *int,
 	myLatFloat float64,
 	myLonFloat float64,
 	myAltFloat float64,
@@ -208,13 +268,13 @@ func buildDisplayInfoAndUpdateDisplay(
 	numPlanes = len(myADSBData.Planes)
 
 	dispLines := []string{
-		fmt.Sprintf("%s %d (%d)", time.Now().Format("15:04:05"), numPlanes, numPlanesWithPos),
+		fmt.Sprintf("%s    %2d(%2d)", time.Now().Format("15:04:05"), numPlanes, numPlanesWithPos),
 	}
 
 	var audible bool
 
 	if len(myADSBData.Planes) > 0 {
-		dispLines = addClosest(myADSBData, myLatFloat, myLonFloat, myAltFloat, minAltitude,
+		dispLines = addClosest(myADSBData, feederStatus, updateStatus, cpuTemp, myLatFloat, myLonFloat, myAltFloat, minAltitude,
 			maxDistance, maxAltitude, audible, dispLines)
 	}
 
@@ -224,6 +284,9 @@ func buildDisplayInfoAndUpdateDisplay(
 //nolint:cyclop
 func addClosest(
 	myADSBData *adsb.Data,
+	feederStatus *map[string]adsb.FeederInfo,
+	updateStatus *bool,
+	cpuTemp *int,
 	myLatFloat float64,
 	myLonFloat float64,
 	myAltFloat float64,
@@ -273,19 +336,37 @@ func addClosest(
 			closest = "none"
 		}
 
-		dispLines = append(dispLines, fmt.Sprintf("%s (%s)", closest, closestPlane.Hex))
+		dispLines = append(dispLines, messagePrinter.Sprintf("%s (%s)", closest, closestPlane.Hex))
 
 		if closestPlane.Category != "" {
-			dispLines = append(dispLines, fmt.Sprintf("%3.1fmi (%s)", dist, closestPlane.Category))
+			dispLines = append(dispLines, messagePrinter.Sprintf("%4.1fmi (%s)    %dC", dist, closestPlane.Category, *cpuTemp))
 		} else {
-			dispLines = append(dispLines, fmt.Sprintf("%3.1fmi", dist))
+			dispLines = append(dispLines, messagePrinter.Sprintf("%4.1fmi         %dC", dist, *cpuTemp))
 		}
 
+		var goodCount int
+
+		var badCount int
+
 		if _, ok := closestPlane.Altitude.(float64); ok {
-			if audible {
-				dispLines = append(dispLines, messagePrinter.Sprintf("%5.0fft (close)", closestPlane.Altitude))
+			for _, v := range *feederStatus {
+				if v.Enabled {
+					if v.BeastStatus == "good" {
+						goodCount++
+					} else if v.BeastStatus != "unknown" {
+						badCount++
+					}
+					if v.MLATStatus == "good" {
+						goodCount++
+					} else if v.MLATStatus != "disabled" {
+						badCount++
+					}
+				}
+			}
+			if *updateStatus {
+				dispLines = append(dispLines, messagePrinter.Sprintf("%6.0fft   %2d(%2d)U", closestPlane.Altitude, goodCount, badCount))
 			} else {
-				dispLines = append(dispLines, messagePrinter.Sprintf("%5.0fft", closestPlane.Altitude))
+				dispLines = append(dispLines, messagePrinter.Sprintf("%6.0fft   %2d(%2d)", closestPlane.Altitude, goodCount, badCount))
 			}
 		}
 	}
