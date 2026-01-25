@@ -23,16 +23,4 @@ Set the following environment variables:
 
 `LUMAADSB_ALT`: Altitude of the host
 
-`LUMAADSB_MAX_ALT`: Max altitude to consider "close"
-
-`LUMAADSB_MAX_DISTANCE`: Max distance to consider "close"
-
-`LUMAADSB_MIN_ALT`: Min altitude to consider "close"
-
-The "close" parameters can also be customized per category by suffixing the category, for example:
-
-`LUMAADSB_MAX_DISTANCE_CATEGORY_A1`: Max distance for A1
-
-`LUMAADSB_MAX_ALT_CATEGORY_A3`: Max altitude for A3
-
 Then run `./luma-adsb`
