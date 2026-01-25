@@ -1,5 +1,8 @@
 # luma-adsb
 
+[![Build and Release](https://github.com/swills/luma-adsb/actions/workflows/build.yml/badge.svg)](https://github.com/swills/luma-adsb/actions/workflows/build.yml)
+[![Lint](https://github.com/swills/luma-adsb/actions/workflows/golangci-lint.yml/badge.svg)](https://github.com/swills/luma-adsb/actions/workflows/golangci-lint.yml)
+
 Designed to run on [ADSB.im](https://adsb.im) and [GeeekPi](https://mygeeekpi.com/) [Mini Tower Kit for Raspberry Pi 5](https://www.amazon.com/dp/B0CQYTN94R)
 
 Displays the ADSB data on the SSD1306 display
