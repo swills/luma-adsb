@@ -23,11 +23,11 @@ jobs:
         binary: ['luma-adsb']
     steps:
       - name: Checkout source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0 # get all tags
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version-file: 'go.mod'
       - name: Install dependencies
@@ -58,7 +58,7 @@ jobs:
             -buildid=${{ steps.vars.outputs.version }}.${{ steps.vars.outputs.commit }} \
           " -o ${{ matrix.arch }}-${{ matrix.os }}-${{ matrix.binary }} ./cmd/${{ matrix.binary }}
       - name: Upload binaries as artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: binary-${{ matrix.arch }}-${{ matrix.os }}-${{ matrix.binary }}
           path: |
@@ -69,7 +69,7 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/')
     steps:
       - name: Download arm64-linux-luma-adsb
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: binary-arm64-linux-luma-adsb
           path: artifacts/arm64-linux

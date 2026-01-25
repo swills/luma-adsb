@@ -16,7 +16,8 @@ type FeederInfo struct {
 	MLATStatus  string
 }
 
-func GetAllFeederStatus(ctx context.Context, host string, timeout time.Duration, config *MicroConfig) (*map[string]FeederInfo, error) {
+func GetAllFeederStatus(ctx context.Context, host string, timeout time.Duration, config *MicroConfig) (
+	*map[string]FeederInfo, error) {
 	newFeederStatusInfo := map[string]FeederInfo{
 		"adsbfi": {
 			Enabled: config.AdsbfiIsEnabled,
@@ -62,16 +63,17 @@ func GetAllFeederStatus(ctx context.Context, host string, timeout time.Duration,
 		},
 	}
 
-	for k, v := range newFeederStatusInfo {
+	for key, v := range newFeederStatusInfo {
 		if v.Enabled {
-			newFeederStatus, err := GetFeederStatus(ctx, host, timeout, k)
+			newFeederStatus, err := GetFeederStatus(ctx, host, timeout, key)
 			if err != nil {
 				return nil, fmt.Errorf("error getting feeder status: %w", err)
 			}
-			t := newFeederStatusInfo[k]
+
+			t := newFeederStatusInfo[key]
 			t.BeastStatus = newFeederStatus.Beast
 			t.MLATStatus = newFeederStatus.MLAT
-			newFeederStatusInfo[k] = t
+			newFeederStatusInfo[key] = t
 		}
 	}
 

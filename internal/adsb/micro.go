@@ -22,7 +22,7 @@ type MicroConfig struct {
 	Uat978IsEnabled bool   `json:"uat978--is_enabled,omitempty"`
 	Lng             string `json:"lng,omitempty"`
 	MlatPrivacy     bool   `json:"mlat_privacy,omitempty"`
-	RouteApi        bool   `json:"route_api,omitempty"`
+	RouteAPI        bool   `json:"route_api,omitempty"`
 	Uat978          bool   `json:"uat978,omitempty"`
 	AliveIsEnabled  bool   `json:"alive--is_enabled,omitempty"`
 
