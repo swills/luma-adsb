@@ -208,23 +208,33 @@ func buildDisplayInfoAndUpdateDisplay(
 	myAltFloat float64,
 	oledData *goi2coled.I2c,
 ) {
-	var numPlanes int
+	var totalPlanes int
 
 	var numPlanesWithPos int
 
-	numPlanes = len(myADSBData.Planes)
+	totalPlanes = len(myADSBData.Planes)
 	for _, v := range myADSBData.Planes {
 		if v.Latitude != 0 || v.Longitude != 0 || v.Last.Latitude != 0 || v.Last.Longitude != 0 {
 			numPlanesWithPos++
 		}
 	}
 
+	planesWithoutPos := totalPlanes - numPlanesWithPos
+
+	var updateString string
+
+	if *updateStatus {
+		updateString = "U"
+	} else {
+		updateString = " "
+	}
+
 	dispLines := []string{
-		fmt.Sprintf("%s    %2d(%2d)", time.Now().Format("15:04:05"), numPlanes, numPlanesWithPos),
+		fmt.Sprintf("%s%s    %2d %2d", time.Now().Format("15:04:05"), updateString, numPlanesWithPos, planesWithoutPos),
 	}
 
 	if len(myADSBData.Planes) > 0 {
-		dispLines = addClosest(myADSBData, feederStatus, updateStatus, cpuTemp, myLatFloat, myLonFloat, myAltFloat,
+		dispLines = addClosest(myADSBData, feederStatus, cpuTemp, myLatFloat, myLonFloat, myAltFloat,
 			dispLines)
 	}
 
@@ -235,7 +245,6 @@ func buildDisplayInfoAndUpdateDisplay(
 func addClosest(
 	myADSBData *adsb.Data,
 	feederStatus *map[string]adsb.FeederInfo,
-	updateStatus *bool,
 	cpuTemp *int,
 	myLatFloat float64,
 	myLonFloat float64,
@@ -280,13 +289,8 @@ func addClosest(
 				}
 			}
 
-			if *updateStatus {
-				dispLines = append(dispLines, messagePrinter.Sprintf("%6.0fft   %2d(%2d)U",
-					closestPlane.Altitude, goodCount, badCount))
-			} else {
-				dispLines = append(dispLines, messagePrinter.Sprintf("%6.0fft   %2d(%2d)",
-					closestPlane.Altitude, goodCount, badCount))
-			}
+			dispLines = append(dispLines, messagePrinter.Sprintf("%6.0fft     %2d %2d",
+				closestPlane.Altitude, goodCount, badCount))
 		}
 	}
 
