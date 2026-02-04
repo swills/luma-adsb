@@ -241,7 +241,6 @@ func buildDisplayInfoAndUpdateDisplay(
 	oled.UpdateDisplayLines(dispLines, oledData)
 }
 
-//nolint:gocognit
 func addClosest(
 	myADSBData *adsb.Data,
 	feederStatus *map[string]adsb.FeederInfo,
