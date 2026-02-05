@@ -1,6 +1,6 @@
 module github.com/swills/luma-adsb
 
-go 1.25.5
+go 1.25.7
 
 require (
 	github.com/jftuga/geodist v1.0.0
